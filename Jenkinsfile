@@ -1,30 +1,58 @@
 pipeline {
-  agent any
-  stages {
-    stage('Checkout') {
-      steps {
-        git 'https://github.com/your-username/deloitte-ci-cd-demo.git'
-      }
+    agent any
+    
+    // Netflix standard: Always check out latest code
+    options {
+        skipDefaultCheckout(false)  // Force SCM checkout
+        timeout(time: 30, unit: 'MINUTES')
     }
-    stage('Install') {
-      steps {
-        sh 'pip install -r requirements.txt'
-      }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm  // Explicit SCM checkout
+                sh 'git log -1'  // Verify last commit
+            }
+        }
+
+        stage('Build') {
+            steps {
+                script {
+                    // Netflix metrics tracking
+                    startTime = System.currentTimeMillis()
+                    
+                    // Real build command
+                    sh 'docker build --no-cache -t recommendation-service .'
+                    
+                    // Record duration
+                    duration = (System.currentTimeMillis() - startTime)/1000
+                    echo "Build completed in ${duration} seconds"
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'pytest tests/ --junitxml=test-results.xml'
+            }
+            post {
+                always {
+                    junit 'test-results.xml'  // Netflix test reporting standard
+                }
+            }
+        }
     }
-    stage('Test') {
-      steps {
-        echo 'No tests yet - simulated Deloitte workflow.'
-      }
+
+    post {
+        always {
+            // Netflix-style build summary
+            script {
+                currentBuild.description = """
+                ${currentBuild.currentResult == 'SUCCESS' ? '✅' : '❌'} ${currentBuild.currentResult}
+                🏗️ Build: ${duration}s
+                📦 Image: recommendation-service
+                """
+            }
+        }
     }
-    stage('Docker Build') {
-      steps {
-        sh 'docker build -t deloitte-demo-app .'
-      }
-    }
-    stage('Deploy') {
-      steps {
-        sh 'docker run -d -p 5000:5000 deloitte-demo-app'
-      }
-    }
-  }
 }
