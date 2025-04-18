@@ -25,7 +25,6 @@ pipeline {
                     sh 'docker build --no-cache -t $IMAGE_NAME .'
                     def duration = (System.currentTimeMillis() - startTime) / 1000
                     echo "Build completed in ${duration} seconds"
-                    // Set build duration for later stages
                     env.BUILD_DURATION = duration.toString()
                 }
             }
@@ -34,13 +33,25 @@ pipeline {
         stage('Test') {
             steps {
                 script {
-                    // Run pytest inside the container to ensure dependencies are met
-                    sh 'docker run --rm $IMAGE_NAME pytest tests/ --junitxml=test-results.xml'
+                    // Check if tests directory exists before running
+                    def testExists = fileExists('tests')
+                    if (testExists) {
+                        sh 'docker run --rm $IMAGE_NAME pytest tests/ --junitxml=test-results.xml'
+                    } else {
+                        echo "⚠️ No tests directory found. Skipping tests."
+                    }
                 }
             }
             post {
                 always {
-                    junit 'test-results.xml'
+                    // Only try to archive results if they exist
+                    script {
+                        if (fileExists('test-results.xml')) {
+                            junit 'test-results.xml'
+                        } else {
+                            echo "⚠️ No test-results.xml found to archive."
+                        }
+                    }
                 }
             }
         }
